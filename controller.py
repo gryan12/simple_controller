@@ -5,10 +5,13 @@ import os
 import sys
 import random
 import subprocess
+import json 
 import logging 
 
 ##logging
 LOGGER = logging.getLogger(__name__)
+logging.basicConfig(level=logging.DEBUG)
+
 
 event_stream_handler = logging.StreamHandler()
 event_stream_handler.setFormatter(logging.Formatter("\nEVENT: %(message)s"))
@@ -20,12 +23,15 @@ EVENT_LOGGER.addHandler(event_stream_handler)
 EVENT_LOGGER.propagate = False
 
 my_env = os.environ.copy()
-DOCKER_PATH = "/home/blint/projects/aries-cloudagent-python/scripts/run_docker"
+DOCKER_PATH = "/home/george/projects/aries-cloudagent-python/scripts/run_docker"
 INTERNAL_HOST = "127.0.0.1"
 ADMIN_PORT = "7000"
 INBOUND_PORT = "8000"
 OUTBOUND_PROTOCOL = "http"
 INBOUND_PROTOCOL  = "http"
+
+
+VENV_ARIES_PATH = "/home/george/projects/simple_controller/simple_controller/bin/aca-py"
 
 
 LEDGER_URL = "http://" + INTERNAL_HOST + ":9000"
@@ -34,25 +40,45 @@ GENESIS_URL = LEDGER_URL + "/genesis"
 #helper
 flatten = lambda l: [item for sublist in l for item in sublist]
 
-def start_docker_process(args): 
+def start_docker_process():
     #p1 = subprocess.run(args, stdout = subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8")
     p1 = subprocess.run([
-                         DOCKER_PATH, 
-                         "start", 
-                         "--inbound-transport", 
-                         "http", 
-                         "127.0.0.1", 
-                         "8000", 
-                         "--outbound-transport", 
-                         "http", 
-                         "--admin", 
-                         "127.0.0.1", 
-                         "7000", 
+                         DOCKER_PATH,
+                         "start",
+                         "--inbound-transport",
+                         "http",
+                         "127.0.0.1",
+                         "8000",
+                         "--outbound-transport",
+                         "http",
+                         "--admin",
+                         "127.0.0.1",
+                         "7000",
+                         "--admin-insecure-mode",
+                         ],
+                        stdout = subprocess.PIPE, 
+                        stderr = subprocess.PIPE,
+                         encoding="utf-8")
+
+    return p1
+
+def start_aries_process(aries_path):
+    p1 = subprocess.run([
+                         aries_path,
+                         "start",
+                         "--inbound-transport",
+                         "http",
+                         "127.0.0.1",
+                         "8000",
+                         "--outbound-transport",
+                         "http",
+                         "--admin",
+                         "localhost",
+                         "7000",
                          "--admin-insecure-mode",
                          ],
                          encoding="utf-8")
 
-    return p1
 
 async def get_genesis_text(): 
     genesis = None
@@ -74,9 +100,12 @@ def gen_rand_seed():
     return seed 
 
 async def register_did(loop):
+
     seed = gen_rand_seed()
+
     ident = "My.Agent"
-    print(f"Registering with seed {seed}")
+
+    logging.debug(f"Registering with seed {seed}")
     client_session = aiohttp.ClientSession(loop=loop)
 
     data = {"alias": ident, "seed": seed, "role": "TRUST_ANCHOR"}
@@ -88,21 +117,48 @@ async def register_did(loop):
             raise Exception(f"Error registering DID, response code {resp.status}")
         nym_info = await resp.json()
         did = nym_info["did"]
-    print(f"Got DID: {did}")
+    logging.debug(f"Got DID: {did}")
     await client_session.close()
 
 
+#returns some JSON from the agent if successful
+async def post_to_admin(loop) -> aiohttp.ClientResponse:
+    admin_path = "http://localhost"  + ":" + ADMIN_PORT + "/schemas"
+    schema_body = {
+        "schema_name": "Test Name",
+        "schema_version": "1.0",
+        "attributes": ["name", "date", "age"],
+    }
 
-def send_simple_msg(agent_endpoint): 
-    return None
+    logging.debug("Attemtping to request ot agent")
+    logging.debug("with data: {}".format(schema_body))
+
+    session = aiohttp.ClientSession(loop=loop)
+
+    async with session.request(
+        "POST", admin_path, json=schema_body
+    ) as resp:
+
+        response_text = await resp.text()
+
+        try:
+            return json.loads(resp_text)
+
+        except Exception as e:
+            print("e")
+
+        return resp_text
+    await session.close()
+
+logging.debug("TEST")
+
+print(os.getenv("DOCKERHOST"))
 
 
 loop = asyncio.get_event_loop()
+start_docker_process()
 loop.run_until_complete(register_did(loop))
-
-
-
-
+loop.run_until_complete(post_to_admin(loop))
 
 
 
