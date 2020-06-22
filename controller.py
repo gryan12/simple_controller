@@ -40,27 +40,12 @@ GENESIS_URL = LEDGER_URL + "/genesis"
 #helper
 flatten = lambda l: [item for sublist in l for item in sublist]
 
-def start_docker_process():
-    #p1 = subprocess.run(args, stdout = subprocess.PIPE, stderr=subprocess.PIPE, encoding="utf-8")
-    p1 = subprocess.run([
-                         DOCKER_PATH,
-                         "start",
-                         "--inbound-transport",
-                         "http",
-                         "127.0.0.1",
-                         "8000",
-                         "--outbound-transport",
-                         "http",
-                         "--admin",
-                         "127.0.0.1",
-                         "7000",
-                         "--admin-insecure-mode",
-                         ],
-                        stdout = subprocess.PIPE, 
-                        stderr = subprocess.PIPE,
-                         encoding="utf-8")
+def command():
+    p1 = sunprocessrun([
+"PORTS="8080:8080 7000:7000" ./run_docker start --wallet-type indy --seed 000000000000000000000000000Agent --wallet-key welldone --wallet-name myWallet --genesis-url http://172.17.0.1:9000/genesis --inbound-transport http 0.0.0.0 8000 --outbound-transport http --admin 0.0.0.0 8080 --admin-insecure-mode"
+    ],
+    encoding = "utf-8")
 
-    return p1
 
 def start_aries_process(aries_path):
     p1 = subprocess.run([
@@ -157,8 +142,8 @@ print(os.getenv("DOCKERHOST"))
 
 loop = asyncio.get_event_loop()
 start_docker_process()
-loop.run_until_complete(register_did(loop))
-loop.run_until_complete(post_to_admin(loop))
+#loop.run_until_complete(register_did(loop))
+#loop.run_until_complete(post_to_admin(loop))
 
 
 
