@@ -114,32 +114,113 @@ class BaseAgent:
                 raise Exception(f"Error registering DID, response code {resp.status}")
 
             resp_data = await resp.json()
-            did = resp_data["did"]
-            self.did = did
+            self.did = resp_data["did"]
         logging.debug(f"Got DID: {did}")
 
-#returns some JSON from the agent if successful
-async def post_schema(self, schema_body) -> aiohttp.ClientResponse:
-    if not schema_body :
-        schema_body = {
-            "schema_name": "Test Name",
-            "schema_version": "1.0",
-            "attributes": ["name", "date", "age"],
+    #returns some JSON from the agent if successful
+    async def post_schema(self, schema_body=None):
+
+        if not schema_body :
+            schema_body = {
+                "attributes": ["name", "date", "age"],
+                "schema_version": "1.0",
+                "schema_name": "Test Name",
+            }
+
+        schema_resp  = await self.aries_post("/schemas", data = schema_body)
+
+        if not schema_resp: 
+            print("NONETYPE RESPONSE")
+            return None 
+        schema_id = schema_resp["schema_id"]
+        logging.debug(f"GOT schema_ID: {schema_id}")
+
+        return schema_id
+
+    async def post_creddef(self, schema_id, rev_sup: bool=False):
+        cred_def = {
+            "schema_id": schema_id,
+            "support_revocation": rev_sup,
         }
-    logging.debug("Attemtping to request to agent")
-    logging.debug("with data: {}".format(schema_body))
-    logging.debug(f"to link: {admin_path}")
 
-    async with self.session.request(
-        "POST", self.admin_path, json=schema_body
-    ) as resp:
-        resp_text = await resp.text()
+        resp = await self.aries_post(
+            "/credential-definitions",
+            cred_def
+        )
+
+        cred_id = resp["credential_defintion_id"]
+        logging.debug(f"credential defintion id acquired: {cred_id}")
+        return cred_id
+
+
+
+
+
+
+
+
+    async def __exit__(self):
+        await self.session.close()
+
+    async def aries_req(self, method, path, data = None) -> aiohttp.ClientResponse:
+
+        fullpath = self.admin_url + path
+
+        logging.debug(f"making {method} request to {fullpath}")
+
+        async with self.session.request(method, self.admin_url + path, json = data) as resp:
+            resp_text = await resp.text()
+            if not resp_text:
+                return None
+            try:
+                print("json is: ", resp_text)
+                return json.loads(resp_text)
+            except json.JSONDecodeError as e: 
+                logging.debug("error decoding json")
+                return resp_text
+
+    async def aries_get(self, path):
         try:
-            return json.loads(resp_text)
+            response = await self.aries_req("GET", path)
+            return response
         except Exception as e:
-            print("e")
-        return resp_text
+            logging.debug(f"EROR DURING GET REQ TO {path}")
+            pass
 
+
+    async def aries_post(self, path, data = None):
+
+        try:
+            response = await self.aries_req("POST", path, data=data)
+            return response
+        except Exception as e:
+            logging.debug(f"ERROR DURING post REQ TO {path}")
+            pass
+
+
+    async def get_current_public_did(self):
+        try:
+            response = await self.aries_get("/wallet/did/public")
+            return response
+        except Exception as e:
+            pass
+
+    async def set_current_public_did(self, did = None):
+        if did:
+            self.did = did
+        try:
+            did_data = {
+                "did": self.did,
+            }
+            result = await self.aries_post("/wallet/did/public",json.dumps(did_data))
+            return result
+        except Exception as e:
+            pass
+
+
+
+
+#testing 
 agent = BaseAgent(
         ledger_host = "localhost",
         ledger_port = "9000",
@@ -150,7 +231,35 @@ agent = BaseAgent(
 
 loop = asyncio.get_event_loop()
 
-loop.run_until_complete(agent.register_did())
+#loop.run_until_complete(agent.register_did())
 
-agent.register_did()
+status = loop.run_until_complete(agent.aries_get("/status"))
+print(f"status is: {status}")
+
+
+public_did = loop.run_until_complete(agent.aries_get("/wallet/did/public"))
+print(f"current public did is: {public_did}")
+
+#did_resp = loop.run_until_complete(agent.set_current_public_did(did="3kmcnCq7GzJ8FUSWxsrihw"))
+#print(f"resp is: {did_resp}")
+
+#public_did = loop.run_until_complete(agent.aries_get("/wallet/did/public"))
+#print(f"current public did is: {public_did}")
+
+dids = loop.run_until_complete(agent.aries_get("/wallet/did"))
+print(f"current dids: {dids}")
+
+#text = loop.run_until_complete(agent.post_schema())
+#print(f"Response text: {text}")
+
+temp = "PjisyYVtLEA8fAsy9MT1rv:2:Test Name:1.0"
+
+cred_id = loop.run_until_complete(agent.post_creddef(temp))
+print(f"cred_def id is: {cred_id}")
+
+loop.run_until_complete(agent.__exit__())
+loop.stop()
+loop.close()
+
+
 
